@@ -1,20 +1,23 @@
-# refactory-shadows-ts
+# shadows-ts
 
-TypeScript shadow libraries for the Refactory pipeline. npm packages that expose API-identical Rust-backed wrappers via napi-rs, enabling TypeScript developers to write standard code while testing against real Rust implementations.
+TypeScript shadow libraries for the Refactory pipeline. API-identical wrappers for TypeScript/Node.js APIs, backed by target-language implementations via native addons.
 
-**Added in Refactory Supplement v0.3** — extends the shadow library model from Python (PyO3) to TypeScript (napi-rs).
+## Structure
 
-## Shadow Libraries
+```
+shadows-ts/
+├── rust/                              # Target: Rust (napi-rs)
+│   ├── @refactory/shadow-string-ts/   # String methods → Rust String/str
+│   ├── @refactory/shadow-json-ts/     # JSON.parse/stringify → serde_json
+│   └── @refactory/shadow-http-ts/     # fetch-like API → reqwest
+├── go/                                # Target: Go (future)
+├── tests/                             # Shared equivalence tests
+└── README.md
+```
 
-| Package | TS API | Rust Crate | Product(s) |
-|---------|--------|------------|-----------|
-| `@refactory/shadow-string-ts` | String methods | Rust `String`/`str` | Sinter (TS SDK) |
-| `@refactory/shadow-json-ts` | `JSON.parse/stringify` | `serde_json` | Sinter (TS SDK) |
-| `@refactory/shadow-http-ts` | fetch-like API | `reqwest` | Sinter connectors |
+## How It Works
 
-## Architecture
-
-TypeScript shadow libraries use napi-rs (Node.js native addon in Rust) to expose Rust-backed implementations with TypeScript-native APIs. The import resolution uses TypeScript path mapping in `tsconfig.json` rather than a runtime import hook.
+TypeScript shadow libraries use napi-rs (Node.js native addon in Rust) or equivalent FFI for other targets. Import resolution uses TypeScript path mapping rather than a runtime hook:
 
 ```json
 // tsconfig.json
@@ -26,6 +29,18 @@ TypeScript shadow libraries use napi-rs (Node.js native addon in Rust) to expose
   }
 }
 ```
+
+## Shadow Libraries (Rust target)
+
+| Package | TS API | Rust Crate |
+|---------|--------|------------|
+| `@refactory/shadow-string-ts` | String methods | Rust `String`/`str` |
+| `@refactory/shadow-json-ts` | `JSON.parse/stringify` | `serde_json` |
+| `@refactory/shadow-http-ts` | fetch-like API | `reqwest` |
+
+## Adding a New Target Language
+
+Create a new directory at the root (e.g. `go/`) with the target-specific build system. The equivalence test templates are shared.
 
 ## License
 
