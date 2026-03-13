@@ -3,197 +3,114 @@
 **Feature Branch**: `001-ts-shadow-libs`
 **Created**: 2026-03-13
 **Status**: Draft
+**Input**: User description: "Implement TypeScript shadow libraries - shadow-string-ts (Rust String), shadow-json-ts (serde_json), shadow-http-ts (reqwest) with napi-rs bindings and Node.js equivalence tests"
 
-## Overview
+## User Scenarios & Testing *(mandatory)*
 
-Three TypeScript shadow libraries provide API-identical wrappers over Rust implementations compiled to native Node.js addons via napi-rs. Standard TypeScript code uses familiar APIs (`String` methods, `JSON.parse`/`JSON.stringify`, `fetch`), while `tsconfig.json` path mappings transparently redirect imports to the Rust-backed packages. No application code changes are required.
+### User Story 1 - String Operations via Rust-Backed Shadow Library (Priority: P1)
 
-### Shadow Packages
+A developer writes standard TypeScript string code using familiar methods like `slice`, `toUpperCase`, `includes`, `replace`, `split`, and `trim`. Their `tsconfig.json` has path mappings that redirect string imports to `@refactory/shadow-string-ts`. At build time and runtime, these calls are routed to a napi-rs native addon backed by Rust's `String` and `str` types. The developer's code remains unchanged -- they write normal TypeScript and get Rust performance characteristics transparently.
 
-| Package                       | TS/JS API it shadows       | Rust backend     |
-|-------------------------------|----------------------------|------------------|
-| `@refactory/shadow-string-ts` | `String.prototype` methods | `String` / `str` |
-| `@refactory/shadow-json-ts`   | `JSON.parse`, `JSON.stringify` | `serde_json` |
-| `@refactory/shadow-http-ts`   | `fetch`-like API           | `reqwest`        |
+**Why this priority**: String manipulation is the most common primitive operation in any application. It exercises the full napi-rs binding pipeline (TS type declarations, native addon compilation, runtime invocation) with simple, synchronous semantics, making it the ideal first proof-of-concept for the shadow library architecture.
 
-### Repository Layout
+**Independent Test**: Can be fully tested by importing string shadow functions, running standard string operations, and asserting output matches Node.js built-in string behavior. Delivers a working napi-rs build pipeline and the foundational pattern for all other shadow libraries.
 
-```
-shadows-ts/
-  packages/
-    shadow-string-ts/
-      Cargo.toml              # napi-rs, napi-derive
-      src/lib.rs              # #[napi] functions for string operations
-      index.ts                # TS re-exports wrapping napi bindings
-      index.d.ts              # Type declarations matching String.prototype
-      package.json
-      __tests__/
-        equivalence.test.ts
-    shadow-json-ts/
-      Cargo.toml              # napi-rs, serde_json
-      src/lib.rs
-      index.ts
-      index.d.ts
-      package.json
-      __tests__/
-        equivalence.test.ts
-    shadow-http-ts/
-      Cargo.toml              # napi-rs, reqwest, tokio
-      src/lib.rs
-      index.ts
-      index.d.ts
-      package.json
-      __tests__/
-        equivalence.test.ts
-  tsconfig.json               # Path mappings for import redirection
-  tsconfig.base.json          # Shared compiler options
-  package.json                # Workspace root
-  vitest.config.ts            # Test runner configuration
-```
+**Acceptance Scenarios**:
+
+1. **Given** a TypeScript file that calls `shadowString.toUpperCase("hello")`, **When** the project is compiled and run with tsconfig path mapping pointing to `@refactory/shadow-string-ts`, **Then** the result is `"HELLO"`, identical to native JS `"hello".toUpperCase()`.
+2. **Given** a string containing Unicode characters (e.g., emojis, CJK), **When** `shadowString.slice(str, 0, 3)` is called, **Then** the result matches the behavior of JS `str.slice(0, 3)` for the same input.
+3. **Given** the `@refactory/shadow-string-ts` npm package, **When** a developer runs `npm run build` in the `rust/` directory, **Then** the napi-rs build completes successfully and produces a `.node` native addon file.
+4. **Given** a TypeScript project with no shadow library imports, **When** the developer adds tsconfig path mappings for `@refactory/shadow-string-ts`, **Then** their existing string code continues to compile and produce identical results.
 
 ---
 
-## User Scenarios & Testing
+### User Story 2 - JSON Parse/Stringify via serde_json (Priority: P2)
 
-### Scenario 1: String operations via shadow
+A developer uses `JSON.parse()` and `JSON.stringify()` in their TypeScript code. Through tsconfig path mapping, these calls are redirected to `@refactory/shadow-json-ts`, which delegates to Rust's `serde_json` crate via napi-rs. The shadow library handles serialization and deserialization of objects, arrays, nested structures, and primitive values, returning results identical to the built-in `JSON` global.
 
-A developer writes standard string manipulation code:
+**Why this priority**: JSON parsing is the second most common operation after string manipulation, especially in web services and API layers. It validates that the shadow library architecture can handle complex, nested data structures crossing the JS-Rust boundary via napi-rs.
 
-```typescript
-import { ShadowString } from "@refactory/shadow-string-ts";
+**Independent Test**: Can be tested by parsing JSON strings and stringifying objects through the shadow library, then comparing output byte-for-byte against Node.js built-in `JSON.parse` and `JSON.stringify`.
 
-const s = new ShadowString("Hello, World!");
-console.log(s.toUpperCase());       // "HELLO, WORLD!"
-console.log(s.slice(0, 5));          // "Hello"
-console.log(s.includes("World"));    // true
-console.log(s.replace("World", "Rust")); // "Hello, Rust!"
-console.log(s.split(", "));         // ["Hello", "World!"]
-```
+**Acceptance Scenarios**:
 
-With `tsconfig.json` path mapping, a project can alias `string-utils` or similar to `@refactory/shadow-string-ts` so that existing utility imports resolve to the shadow.
-
-**Test**: `packages/shadow-string-ts/__tests__/equivalence.test.ts`
-- For each method, run the same operation on a native JS `String` and a `ShadowString`.
-- Compare return values for: `toUpperCase`, `toLowerCase`, `trim`, `trimStart`, `trimEnd`, `slice`, `substring`, `indexOf`, `lastIndexOf`, `includes`, `startsWith`, `endsWith`, `replace`, `replaceAll`, `split`, `repeat`, `padStart`, `padEnd`, `charAt`, `charCodeAt`, `concat`, `match`, `search`.
-- Test with ASCII, unicode (emoji, CJK, combining characters), and empty strings.
-
-### Scenario 2: JSON parsing and serialization
-
-```typescript
-import { parse, stringify } from "@refactory/shadow-json-ts";
-
-const data = { key: [1, 2.5, true, null], nested: { a: "b" } };
-const encoded = stringify(data, null, 2);
-const decoded = parse(encoded);
-// decoded deep-equals data
-```
-
-The `tsconfig.json` maps a project-local `json-utils` path (or the developer imports `@refactory/shadow-json-ts` directly).
-
-**Test**: `packages/shadow-json-ts/__tests__/equivalence.test.ts`
-- Round-trip primitives: strings, numbers (integer, float, negative, zero), booleans, null.
-- Round-trip complex structures: nested objects, arrays, mixed types.
-- `stringify` options: replacer (function and array), space (number and string).
-- `parse` options: reviver function.
-- Error cases: malformed JSON throws `SyntaxError`-compatible error with similar message.
-- Edge cases: `Infinity`, `NaN`, `undefined` handling matches `JSON.stringify` behavior (outputs `null` or omits keys).
-
-### Scenario 3: HTTP fetch
-
-```typescript
-import { fetch } from "@refactory/shadow-http-ts";
-
-const response = await fetch("https://api.example.com/data", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ query: "test" }),
-});
-
-const json = await response.json();
-console.log(response.status); // 200
-```
-
-**Test**: `packages/shadow-http-ts/__tests__/equivalence.test.ts`
-- Use a local HTTP test server (via `msw` or a simple `http.createServer`).
-- GET, POST, PUT, DELETE, PATCH requests.
-- Request headers, query parameters, JSON body, text body.
-- Response: `.status`, `.statusText`, `.headers`, `.json()`, `.text()`, `.arrayBuffer()`.
-- Timeout handling, abort signal support.
-- Compare behavior against Node.js built-in `fetch` (Node 18+).
-
-### Scenario 4: tsconfig path mapping
-
-A project's `tsconfig.json` includes:
-
-```json
-{
-  "compilerOptions": {
-    "paths": {
-      "@app/string-utils": ["./node_modules/@refactory/shadow-string-ts"],
-      "@app/json": ["./node_modules/@refactory/shadow-json-ts"],
-      "@app/http": ["./node_modules/@refactory/shadow-http-ts"]
-    }
-  }
-}
-```
-
-Existing imports like `import { parse } from "@app/json"` now resolve to the shadow implementation without changing source files.
-
-**Test**: Create a small integration test project with the path mappings above. Verify that `tsc --noEmit` type-checks successfully and that runtime behavior matches native APIs.
+1. **Given** a valid JSON string `'{"name":"alice","age":30}'`, **When** `shadowJson.parse(input)` is called, **Then** the returned object is deeply equal to `JSON.parse('{"name":"alice","age":30}')`.
+2. **Given** a JavaScript object with nested arrays and objects, **When** `shadowJson.stringify(obj)` is called, **Then** the output string is identical to `JSON.stringify(obj)`.
+3. **Given** an invalid JSON string, **When** `shadowJson.parse(badInput)` is called, **Then** the function throws an error with a message that includes the position of the syntax error.
+4. **Given** a `stringify` call with a `replacer` function and `space` argument, **When** `shadowJson.stringify(obj, replacer, 2)` is called, **Then** the formatted output matches `JSON.stringify(obj, replacer, 2)`.
 
 ---
 
-## Requirements
+### User Story 3 - HTTP Fetch via reqwest (Priority: P3)
 
-### R1: napi-rs package per shadow module
+A developer uses a fetch-like API (modeled on the Web Fetch standard) in their TypeScript code. Through tsconfig path mapping (`node-fetch` or `fetch` mapped to `@refactory/shadow-http-ts`), HTTP requests are handled by Rust's `reqwest` crate via napi-rs. The shadow library supports GET, POST, PUT, DELETE methods, request headers, JSON/text response bodies, and status code handling.
 
-Each of the three packages must:
+**Why this priority**: HTTP client functionality is the most complex shadow library due to async I/O, but it demonstrates that the architecture works for asynchronous operations crossing the JS-Rust boundary. It is lower priority because it depends on the foundational napi-rs patterns proven in P1 and P2.
 
-1. Compile a Rust crate via napi-rs into a platform-specific `.node` native addon.
-2. Export a TypeScript API that mirrors the standard JS/TS API it shadows.
-3. Include full `.d.ts` type declarations so that consumers get accurate IntelliSense and type checking.
-4. Support Node.js 18+ on Linux (x64, arm64), macOS (x64, arm64), and Windows (x64).
-5. Use `@napi-rs/cli` for build tooling.
+**Independent Test**: Can be tested by making HTTP requests to a local test server (or mock), comparing response status codes, headers, and body content against equivalent calls made with Node.js native `fetch` or `node-fetch`.
 
-### R2: tsconfig path mapping
+**Acceptance Scenarios**:
 
-1. The workspace `tsconfig.json` must define path aliases that map standard-looking imports to shadow packages.
-2. Path mappings must work with both `tsc` compilation and runtime bundlers (esbuild, webpack, vite).
-3. A documented example `tsconfig.json` snippet must be provided showing how consumers configure their own projects.
-
-### R3: Equivalence test suite
-
-Each package must include `__tests__/equivalence.test.ts` that:
-
-1. Runs the same operations through the native JS/TS API and the shadow implementation.
-2. Asserts identical return values using deep equality.
-3. Asserts identical error behavior (error type, message pattern).
-4. Uses `vitest` as the test runner with `describe`/`it` blocks.
-5. Is runnable via `npm test` from the workspace root.
-
-### R4: Build and packaging
-
-1. `npm run build` at the workspace root compiles all three napi-rs crates and produces the `.node` addons.
-2. Each package has its own `package.json` with correct `main`, `types`, `napi`, and `files` fields.
-3. The workspace uses npm workspaces (or pnpm workspaces) for monorepo management.
-4. CI must run: `npm run build`, `npm test`, and `cargo test --workspace`.
-
-### R5: API surface — minimum coverage per package
-
-**@refactory/shadow-string-ts**: `toUpperCase`, `toLowerCase`, `trim`, `trimStart`, `trimEnd`, `slice`, `substring`, `indexOf`, `lastIndexOf`, `includes`, `startsWith`, `endsWith`, `replace`, `replaceAll`, `split`, `repeat`, `padStart`, `padEnd`, `charAt`, `charCodeAt`, `concat`, `at`, `match`, `search`, `normalize`. Constructor accepts `string`. Implements `toString()` and `valueOf()` for interop with native strings.
-
-**@refactory/shadow-json-ts**: `parse(text: string, reviver?: Function): any`, `stringify(value: any, replacer?: Function | string[], space?: number | string): string`. Error class `ShadowJSONError` extending `SyntaxError` for parse failures. Handles all JSON-legal types; behavior on `undefined`, `Infinity`, `NaN`, `BigInt`, and circular references must match `JSON.stringify`.
-
-**@refactory/shadow-http-ts**: `fetch(url: string | URL, init?: RequestInit): Promise<Response>`. `RequestInit` supports `method`, `headers`, `body` (string, Buffer, ReadableStream), `signal` (AbortSignal), `redirect`, `keepalive`. `Response` exposes `status`, `statusText`, `ok`, `headers`, `url`, `redirected`, `type`, and methods `json()`, `text()`, `arrayBuffer()`, `blob()`, `clone()`. `Headers` class with `get`, `set`, `has`, `delete`, `forEach`, `entries`, `keys`, `values`.
+1. **Given** a running HTTP server that returns `{"ok":true}` at `/health`, **When** `shadowHttp.fetch("http://localhost:PORT/health")` is called, **Then** the response has status 200 and `response.json()` resolves to `{ok: true}`.
+2. **Given** a POST endpoint that echoes the request body, **When** `shadowHttp.fetch(url, { method: "POST", body: JSON.stringify({key: "value"}), headers: {"Content-Type": "application/json"} })` is called, **Then** the echoed body matches the sent body.
+3. **Given** a URL that returns a 404, **When** `shadowHttp.fetch(url)` is called, **Then** `response.ok` is `false` and `response.status` is `404`.
+4. **Given** a URL that is unreachable (connection refused), **When** `shadowHttp.fetch(url)` is called, **Then** the promise rejects with a network error.
 
 ---
 
-## Success Criteria
+### User Story 4 - Equivalence Test Suite (Priority: P1)
 
-1. **Build succeeds**: `npm run build` at the workspace root completes without errors, producing `.node` addons for all three packages.
-2. **Type checking passes**: `tsc --noEmit` with the workspace `tsconfig.json` reports zero errors.
-3. **Equivalence tests pass**: `npm test` exits 0 with all `equivalence.test.ts` suites green across all three packages.
-4. **Cargo tests pass**: `cargo test --workspace` in the Rust workspace passes all native unit tests.
-5. **Path mapping works**: A sample project with `tsconfig.json` path aliases compiles and runs correctly, loading shadow implementations via the mapped paths.
-6. **No source changes required**: Existing TS code using `String` methods, `JSON.parse`/`JSON.stringify`, or `fetch` works without modification when path mappings are configured.
-7. **Cross-platform**: Native addons build and tests pass on macOS arm64 (development), Linux x64 (CI), and Windows x64 (CI).
+A CI pipeline runs a shared equivalence test suite that exercises every shadow library function side-by-side with its Node.js built-in counterpart. Each test calls both the shadow implementation and the native implementation with identical inputs and asserts that outputs match. The test suite lives in `tests/` and is parameterized to run against any target backend (currently Rust).
+
+**Why this priority**: Without equivalence tests, there is no way to verify that the shadow libraries are truly API-identical to their Node.js counterparts. This is a P1 because it is the acceptance gate for all other stories.
+
+**Independent Test**: Can be run independently with `npm test` from the repo root. Each test file covers one shadow library and produces pass/fail results showing exactly which operations diverge, if any.
+
+**Acceptance Scenarios**:
+
+1. **Given** the equivalence test suite and a built `@refactory/shadow-string-ts` package, **When** `npm test` is run, **Then** all string equivalence tests pass, confirming identical behavior to native JS string methods.
+2. **Given** the equivalence test suite and a built `@refactory/shadow-json-ts` package, **When** `npm test` is run, **Then** all JSON equivalence tests pass, confirming identical behavior to native `JSON.parse` and `JSON.stringify`.
+3. **Given** a new string method is added to the shadow library, **When** the developer does not add a corresponding equivalence test, **Then** a coverage check or linting rule flags the missing test.
+
+---
+
+### Edge Cases
+
+- What happens when a Rust string operation encounters invalid UTF-8 sequences that JavaScript handles permissively (e.g., lone surrogates)? The shadow library must either match JS behavior or document the divergence explicitly.
+- How does `JSON.parse` handle `__proto__` keys, `BigInt` values, or circular references? The serde_json-backed implementation must replicate V8's behavior for `__proto__` and throw on unsupported types.
+- What happens when `fetch` encounters HTTP redirects (301, 302, 307, 308)? The reqwest-backed implementation must follow redirects by default, matching fetch spec behavior.
+- How does the system handle the native addon `.node` file not being found at runtime (e.g., wrong architecture, missing build step)? The shadow library should throw a clear error indicating the native addon is missing and suggesting `npm run build`.
+- What happens when tsconfig path mappings are removed? The TypeScript code should fall back to standard Node.js built-in behavior with no runtime errors.
+
+## Requirements *(mandatory)*
+
+### Functional Requirements
+
+- **FR-001**: System MUST provide an npm package `@refactory/shadow-string-ts` that exposes functions mirroring JavaScript's `String.prototype` methods (`slice`, `substring`, `toUpperCase`, `toLowerCase`, `trim`, `trimStart`, `trimEnd`, `includes`, `indexOf`, `lastIndexOf`, `startsWith`, `endsWith`, `replace`, `replaceAll`, `split`, `repeat`, `padStart`, `padEnd`, `charAt`, `charCodeAt`, `concat`, `match`, `search`).
+- **FR-002**: System MUST provide an npm package `@refactory/shadow-json-ts` that exposes `parse(text: string, reviver?: Function): any` and `stringify(value: any, replacer?: Function | string[], space?: number | string): string`, matching the signatures of the built-in `JSON` global.
+- **FR-003**: System MUST provide an npm package `@refactory/shadow-http-ts` that exposes a `fetch(url: string, init?: RequestInit): Promise<Response>` function supporting GET, POST, PUT, DELETE, PATCH, HEAD, and OPTIONS methods, request headers, and JSON/text response body reading.
+- **FR-004**: Each shadow library package MUST include TypeScript declaration files (`.d.ts`) that exactly match the type signatures of their Node.js counterparts, enabling full IDE autocompletion and type checking.
+- **FR-005**: Each shadow library MUST be implemented as a napi-rs native addon, compiled from Rust source code located under `rust/@refactory/shadow-<name>-ts/`.
+- **FR-006**: The build system MUST use `napi-rs` (via `@napi-rs/cli`) to compile Rust code into a platform-specific `.node` native addon, with support for at least macOS (aarch64, x86_64) and Linux (x86_64).
+- **FR-007**: Import redirection MUST work via `tsconfig.json` `paths` mapping (e.g., mapping `"string-utils"` to `["@refactory/shadow-string-ts"]`) with no runtime hook or loader required.
+- **FR-008**: The `tests/` directory MUST contain equivalence tests that invoke both the shadow library and the Node.js built-in for each operation and assert identical output.
+- **FR-009**: Each shadow library MUST throw errors that are compatible with standard JavaScript Error types, including appropriate error messages and stack traces.
+- **FR-010**: The `@refactory/shadow-http-ts` package MUST support async/await patterns, returning Promises that resolve or reject in the same circumstances as the Web Fetch API.
+
+### Key Entities
+
+- **Shadow Library Package**: An npm package under the `@refactory` scope containing TypeScript declarations and a compiled napi-rs native addon. Each package maps one-to-one with a standard TS/JS API surface (String methods, JSON global, fetch API).
+- **Native Addon**: A `.node` file compiled from Rust via napi-rs. It is the binary artifact that the shadow library's TypeScript wrapper loads at runtime. Platform-specific (OS + architecture).
+- **Equivalence Test**: A test case that calls both the shadow implementation and the Node.js built-in with the same input, then asserts output equality. Lives in `tests/` and is parameterized by target backend.
+- **tsconfig Path Mapping**: A compiler configuration entry that redirects TypeScript module resolution from a standard import path to a shadow library package, enabling transparent substitution without code changes.
+
+## Success Criteria *(mandatory)*
+
+### Measurable Outcomes
+
+- **SC-001**: All three shadow library packages (`shadow-string-ts`, `shadow-json-ts`, `shadow-http-ts`) compile successfully via `napi-rs` on macOS and Linux, producing valid `.node` native addons.
+- **SC-002**: The equivalence test suite passes with 100% of implemented operations producing output identical to their Node.js built-in counterparts when given the same input.
+- **SC-003**: A developer can take an existing TypeScript file that uses `String.prototype` methods, `JSON.parse/stringify`, or `fetch`, add tsconfig path mappings, and run it against the shadow libraries with zero code changes to the application source.
+- **SC-004**: The `npm run build` command in the repo root completes in under 120 seconds on a modern development machine (M1/M2 Mac or equivalent).
+- **SC-005**: Each shadow library package is publishable to npm with correct `main`, `types`, and `napi` fields in `package.json`, and can be installed and used in a fresh TypeScript project.
+- **SC-006**: The equivalence test suite covers at least 20 string operations, 4 JSON operations (parse, stringify with variations), and 5 HTTP operations (GET, POST, error handling, headers, redirect following).
