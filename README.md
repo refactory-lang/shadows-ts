@@ -1,3 +1,7 @@
+<p align="center">
+  <a href="https://github.com/refactory-lang"><img src="https://raw.githubusercontent.com/refactory-lang/.github/main/assets/refactory-logo.svg" alt="Refactory" width="300"></a>
+</p>
+
 # shadows-ts
 
 TypeScript shadow libraries for the Refactory pipeline. API-identical wrappers for TypeScript/Node.js APIs, backed by target-language implementations via native addons.
