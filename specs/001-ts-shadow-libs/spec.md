@@ -114,3 +114,37 @@ A CI pipeline runs a shared equivalence test suite that exercises every shadow l
 - **SC-004**: The `npm run build` command in the repo root completes in under 120 seconds on a modern development machine (M1/M2 Mac or equivalent).
 - **SC-005**: Each shadow library package is publishable to npm with correct `main`, `types`, and `napi` fields in `package.json`, and can be installed and used in a fresh TypeScript project.
 - **SC-006**: The equivalence test suite covers at least 20 string operations, 4 JSON operations (parse, stringify with variations), and 5 HTTP operations (GET, POST, error handling, headers, redirect following).
+
+---
+
+## v0.3 Addendum: Extended Scope
+
+*Added 2026-03-16 to align with master spec v0.3*
+
+### Expanded Library Inventory
+
+The initial 3 libraries (shadow-string-ts, shadow-json-ts, shadow-http-ts) represent the Phase 1 minimum. The full shadow-ts ecosystem should expand to cover the standard Node.js modules used in n8n nodes and Sinter steps:
+
+| Library | Backing Rust Crate | Phase |
+|---------|-------------------|-------|
+| `shadow-string-ts` | Rust `String`/`str` | Phase 1 |
+| `shadow-json-ts` | `serde_json` | Phase 1 |
+| `shadow-http-ts` | `reqwest` | Phase 1 |
+| `shadow-path-ts` | `std::path` | Phase 2 |
+| `shadow-crypto-ts` | `sha2`/`ring` | Phase 2 |
+| `shadow-url-ts` | `url` | Phase 2 |
+| `shadow-buffer-ts` | `Vec<u8>` | Phase 2 |
+| `shadow-fs-ts` | `std::fs`/`tokio::fs` | Phase 2 |
+
+### Fallback Strategy
+
+When a TypeScript file imports a module with no shadow:
+- **Profile validator warns** on unrecognised imports (Category B conditional — not a hard reject)
+- **Normalize-Det flags** the import for manual review
+- If a clear Rust crate equivalent exists, it surfaces as a **shadow library stub request** in the promotion pipeline
+- If no equivalent exists, the import is a **hard profile violation**
+
+### Additional Success Criteria
+
+- **SC-007**: Fallback strategy produces clear, actionable diagnostics for unshadowed imports (module name, suggested Rust crate, resolution options)
+- **SC-008**: Phase 2 libraries achieve equivalence test coverage of at least 15 operations each
