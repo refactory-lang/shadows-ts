@@ -123,18 +123,18 @@ A CI pipeline runs a shared equivalence test suite that exercises every shadow l
 
 ### Expanded Library Inventory
 
-The initial 3 libraries (shadow-string-ts, shadow-json-ts, shadow-http-ts) represent the Phase 1 minimum. The full shadow-ts ecosystem should expand to cover the standard Node.js modules used in n8n nodes and Sinter steps:
+The initial 3 libraries (shadow-string-ts, shadow-json-ts, shadow-http-ts) represent the Milestone 1 minimum. The full shadow-ts ecosystem should expand to cover the standard Node.js modules used in n8n nodes and Sinter steps:
 
-| Library | Backing Rust Crate | Phase |
-|---------|-------------------|-------|
-| `shadow-string-ts` | Rust `String`/`str` | Phase 1 |
-| `shadow-json-ts` | `serde_json` | Phase 1 |
-| `shadow-http-ts` | `reqwest` | Phase 1 |
-| `shadow-path-ts` | `std::path` | Phase 2 |
-| `shadow-crypto-ts` | `sha2`/`ring` | Phase 2 |
-| `shadow-url-ts` | `url` | Phase 2 |
-| `shadow-buffer-ts` | `Vec<u8>` | Phase 2 |
-| `shadow-fs-ts` | `std::fs`/`tokio::fs` | Phase 2 |
+| Library | Backing Rust Crate | Milestone |
+|---------|-------------------|-----------|
+| `shadow-string-ts` | Rust `String`/`str` | Milestone 1 |
+| `shadow-json-ts` | `serde_json` | Milestone 1 |
+| `shadow-http-ts` | `reqwest` | Milestone 1 |
+| `shadow-path-ts` | `std::path` | Milestone 2 |
+| `shadow-crypto-ts` | `sha2`/`ring` | Milestone 2 |
+| `shadow-url-ts` | `url` | Milestone 2 |
+| `shadow-buffer-ts` | `Vec<u8>` | Milestone 2 |
+| `shadow-fs-ts` | `std::fs`/`tokio::fs` | Milestone 2 |
 
 ### Fallback Strategy
 
@@ -147,4 +147,4 @@ When a TypeScript file imports a module with no shadow:
 ### Additional Success Criteria
 
 - **SC-007**: Fallback strategy produces clear, actionable diagnostics for unshadowed imports (module name, suggested Rust crate, resolution options)
-- **SC-008**: Phase 2 libraries achieve equivalence test coverage of at least 15 operations each
+- **SC-008**: Milestone 2 libraries achieve equivalence test coverage of at least 15 operations each
